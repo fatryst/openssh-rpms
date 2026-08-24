@@ -59,36 +59,27 @@ GUESS_DIST() {
 	esac
 }
 
+# Map GUESS_DIST output to the spec dir and set per-dist build defaults.
+# Sets globals: rpmtopdir; WITH_OPENSSL (el7 only, unless already set)
 TOPDIR_SELECT() {
-	local DISTVER
-	DISTVER=$(GUESS_DIST)
-	case $DISTVER in
-		el7)
-			rpmtopdir=el7
-			if [[ -z ${WITH_OPENSSL+x} ]]; then
-				local opensslver
-				opensslver=$(rpm -q openssl --qf "%{VERSION}" 2>/dev/null | cut -d. -f1)
-				[[ $opensslver -ge 3 ]] && WITH_OPENSSL=1 || WITH_OPENSSL=2
-			fi
-			;;
-		el6)
-			rpmtopdir=el6
-			WITH_OPENSSL=${WITH_OPENSSL:-2}
-			;;
-		el5)
-			rpmtopdir=el5
-			WITH_OPENSSL=${WITH_OPENSSL:-2}
-			;;
-		*)
-			echo "Distro undefined, please specify manually: el5 el6 el7"
-			echo -e "\nCurrent OS:"
-			[[ -f /etc/os-release ]] && cat /etc/os-release
-			[[ -f /etc/redhat-release ]] && cat /etc/redhat-release
-			[[ -f /etc/system-release ]] && cat /etc/system-release
-			echo -e "Current OS vendor: $(rpm --eval '%{?_vendor}') \n"
-			return 1
-			;;
-	esac
+	rpmtopdir=$(GUESS_DIST)
+	if [[ ! -d $rpmtopdir ]]; then
+		echo "Distro undefined, please specify manually: el5 el6 el7"
+		echo "eg: ${0} el7"
+		echo -e "\nCurrent OS:"
+		[[ -f /etc/os-release ]] && cat /etc/os-release
+		[[ -f /etc/redhat-release ]] && cat /etc/redhat-release
+		[[ -f /etc/system-release ]] && cat /etc/system-release
+		echo -e "Current OS vendor: $(rpm --eval '%{?_vendor}') \n"
+		return 1
+	fi
+	# default WITH_OPENSSL for el7: system openssl >=3 -> 1, else static(2);
+	# el5/el6 stay unset, BUILD_RPM defaults them to static(2)
+	if [[ $rpmtopdir == el7 && -z ${WITH_OPENSSL+x} ]]; then
+		local opensslver
+		opensslver=$(rpm -q openssl --qf "%{VERSION}" 2>/dev/null | cut -d. -f1)
+		[[ $opensslver -ge 3 ]] && WITH_OPENSSL=1 || WITH_OPENSSL=2
+	fi
 }
 
 BUILD_RPM() {
@@ -175,45 +166,31 @@ LIST_RPMS() {
 	[[ -d $RPMDIR ]] && find "$RPMDIR" -type f -name '*.rpm'
 }
 
-# sub cmds
+# entry points
 case $arg1 in
 	GETEL)
 		GUESS_DIST
-		exit 0
 		;;
 	GETRPM)
 		TOPDIR_SELECT
 		LIST_RPMS
-		exit 0
 		;;
 	RPMDIR)
 		TOPDIR_SELECT
 		LIST_RPMDIR
-		exit 0
+		;;
+	"")
+		# auto select dist
+		TOPDIR_SELECT
+		BUILD_RPM
 		;;
 	*)
-		if [[ -n $arg1 && ! -d $arg1 ]]; then
+		# manual specified dist dir
+		if [[ ! -d $arg1 ]]; then
 			echo -e "Subcmd: $arg1 not found.\n GETEL, GETRPM, RPMDIR"
 			exit 1
 		fi
+		rpmtopdir=$arg1
+		BUILD_RPM
 		;;
 esac
-
-# manual specified dist
-if [[ -n $arg1 && -d $arg1 ]]; then
-	rpmtopdir=$arg1
-	BUILD_RPM
-	exit 0
-fi
-
-# auto select dist
-TOPDIR_SELECT
-if [[ ! -d $rpmtopdir ]]; then
-	echo "This script works only in el5/el6/el7"
-	echo "eg: ${0} el7"
-	exit 1
-fi
-
-if [[ -d $rpmtopdir ]]; then
-	BUILD_RPM
-fi

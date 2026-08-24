@@ -132,6 +132,8 @@ BUILD_RPM() {
 		&& RPMBUILDOPTS+=('--define' "dist .$(rpm -q glibc | rev | cut -d. -f2 | rev)")
 
 	pushd $rpmtopdir
+	# ensure the rpmbuild _topdir tree exists (fresh clone has no empty dirs)
+	mkdir -p BUILD RPMS SRPMS SOURCES SPECS
 	RPMBUILDOPTS+=('--define' "_topdir $PWD")
 	for fn in "${SOURCES[@]}"; do
 		CHECKEXISTS "$fn" \

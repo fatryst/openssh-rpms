@@ -33,38 +33,30 @@ CHECKEXISTS() {
 GUESS_DIST() {
 	# will not work if rpm cmd not exists
 	if ! type -p rpm >/dev/null; then
-		echo 'unknown' && return 0
+		echo 'unknown'
+		return 0
 	fi
 
 	local dist
 	dist=$(rpm --eval '%{?dist}' | tr -d '.')
 
-	# fallback to el7
-	[[ $dist == "el9" ]] && dist="el7"
-	[[ $dist == "el8" ]] && dist="el7"
-	[[ $dist == "an8" ]] && dist="el7" # Anolis 8
-	[[ $dist == "an7" ]] && dist="el7" # Anolis 7
-	[[ $dist == uel* ]] && dist="el7"  # UOS20+
+	# Only el5/el6 have dedicated spec dirs; EL7+ (incl. EL-like rebuilds)
+	# all share the el7 systemd layout.
+	case $dist in
+		el5) echo 'el5' && return 0 ;;
+		el6) echo 'el6' && return 0 ;;
+		el*) echo 'el7' && return 0 ;;
+	esac
 
-	[[ -n $dist ]] && echo $dist && return 0
-
+	# fallback via glibc version when %{?dist} is undefined:
+	# el5 uses glibc 2.5, el6 uses 2.12, anything newer maps to el7
 	local glibcver
 	glibcver=$(ldd --version | head -n1 | grep -Eo '[0-9]+' | tr -d '\n')
-
-	# centos 5 uses glibc 2.5
-	[[ $glibcver -eq 25 ]] && echo 'el5' && return 0
-
-	# centos 6 uses glibc 2.12
-	[[ $glibcver -eq 212 ]] && echo 'el6' && return 0
-
-	# centos 7 uses glibc 2.17
-	[[ $glibcver -eq 217 ]] && echo 'el7' && return 0
-
-	# centos 8 uses glibc 2.28, also map to el7
-	[[ $glibcver -eq 228 ]] && echo 'el7' && return 0
-
-	# some centos-like dists ships higher version of glibc, fallback to el7
-	[[ $glibcver -gt 217 ]] && echo 'el7' && return 0
+	case $glibcver in
+		25) echo 'el5' ;;
+		212) echo 'el6' ;;
+		*) echo 'el7' ;;
+	esac
 }
 
 TOPDIR_SELECT() {
